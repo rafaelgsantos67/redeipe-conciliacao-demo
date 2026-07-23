@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Demonstração de painel de conciliação bancária para rede de postos — dados fictícios.">
+  <title>Rede Ipê · Conciliação Bancária — Demonstração</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- ===================== CABEÇALHO ===================== -->
+  <header class="topo">
+    <div class="topo-conteudo">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="46" height="46" role="img" aria-label="Logotipo estilizado da Rede Ipê">
+          <rect x="2" y="2" width="60" height="60" rx="16" fill="#1F4A54" stroke="rgba(255,255,255,.45)" stroke-width="2"/>
+          <!-- tronco branco do ipê -->
+          <path d="M31 52c.4-7-.6-13-4-19 2 1.4 3.4 3 4.6 5 .3-2.6.2-5-.6-8 1.8 1.6 2.6 3.4 3.2 5.6.8-4 2.6-6.8 5.8-9-1.8 4-2.6 7.6-2.4 11.6 1.2-1.6 2.4-2.6 4-3.6-2.6 5.4-3.6 11-3.4 17.4h-7.2z" fill="#FFFFFF"/>
+          <!-- copa de folhas âmbar -->
+          <circle cx="22" cy="24" r="7" fill="#F5A623"/>
+          <circle cx="33" cy="17" r="8" fill="#F5A623"/>
+          <circle cx="44" cy="24" r="6.4" fill="#F5A623"/>
+          <circle cx="27" cy="15" r="5" fill="#F8BC4F"/>
+          <circle cx="40" cy="15" r="4.6" fill="#F8BC4F"/>
+        </svg>
+      </span>
+      <div class="marca">
+        <span class="marca-nome">Rede Ipê</span>
+        <span class="marca-sub">Conciliação Bancária</span>
+      </div>
+      <span class="selo-demo">DEMONSTRAÇÃO</span>
+    </div>
+  </header>
+  <div class="faixa-ambar" aria-hidden="true"></div>
+
+  <!-- ===================== BARRA GLOBAL: ABAS + FILTROS ===================== -->
+  <div class="barra-global">
+    <nav class="abas" role="tablist" aria-label="Seções do painel">
+      <button class="aba" role="tab" id="aba-dashboard"   aria-controls="tab-dashboard"  aria-selected="true"  data-tab="dashboard">Painel</button>
+      <button class="aba" role="tab" id="aba-conciliacao" aria-controls="tab-conciliacao" aria-selected="false" data-tab="conciliacao">Conciliação</button>
+      <button class="aba" role="tab" id="aba-fechamento"  aria-controls="tab-fechamento" aria-selected="false" data-tab="fechamento">Fechamento de Caixa</button>
+      <button class="aba" role="tab" id="aba-recebiveis"  aria-controls="tab-recebiveis" aria-selected="false" data-tab="recebiveis">Recebíveis</button>
+      <button class="aba" role="tab" id="aba-taxas"       aria-controls="tab-taxas"      aria-selected="false" data-tab="taxas">Taxas &amp; Simulador</button>
+      <button class="aba" role="tab" id="aba-relatorios"  aria-controls="tab-relatorios" aria-selected="false" data-tab="relatorios">Relatórios</button>
+      <button class="aba" role="tab" id="aba-manual"      aria-controls="tab-manual"     aria-selected="false" data-tab="manual">Manual</button>
+    </nav>
+    <div class="filtros-globais">
+      <label class="filtro-rotulo" for="filtro-unidade">Unidade</label>
+      <select id="filtro-unidade" aria-label="Filtrar por unidade"></select>
+      <div class="segmentado" role="group" aria-label="Filtrar por período">
+        <button type="button" class="seg-btn" data-periodo="1">Hoje</button>
+        <button type="button" class="seg-btn" data-periodo="7">7 dias</button>
+        <button type="button" class="seg-btn ativo" data-periodo="30" aria-pressed="true">30 dias</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== CONTEÚDO DAS ABAS ===================== -->
+  <main id="conteudo">
+    <section id="tab-dashboard"  class="painel-aba" role="tabpanel" aria-labelledby="aba-dashboard" tabindex="0"></section>
+    <section id="tab-conciliacao" class="painel-aba" role="tabpanel" aria-labelledby="aba-conciliacao" tabindex="0" hidden></section>
+    <section id="tab-fechamento" class="painel-aba" role="tabpanel" aria-labelledby="aba-fechamento" tabindex="0" hidden></section>
+    <section id="tab-recebiveis" class="painel-aba" role="tabpanel" aria-labelledby="aba-recebiveis" tabindex="0" hidden></section>
+    <section id="tab-taxas"      class="painel-aba" role="tabpanel" aria-labelledby="aba-taxas" tabindex="0" hidden></section>
+    <section id="tab-relatorios" class="painel-aba" role="tabpanel" aria-labelledby="aba-relatorios" tabindex="0" hidden></section>
+    <section id="tab-manual"     class="painel-aba" role="tabpanel" aria-labelledby="aba-manual" tabindex="0" hidden></section>
+  </main>
+
+  <!-- ===================== RODAPÉ ===================== -->
+  <footer class="rodape">
+    <p class="rodape-texto">
+      Demonstração desenvolvida por <strong>Rafael Guilherme dos Santos</strong> ·
+      Dados fictícios e ilustrativos · Este material é um protótipo de apresentação
+      e não é um sistema oficial da Rede Ipê.
+    </p>
+    <ul class="rodape-unidades" id="rodape-unidades"></ul>
+    <button type="button" class="btn btn-contorno" id="btn-reiniciar">Reiniciar demonstração</button>
+  </footer>
+
+  <!-- ===================== MODAL DE DETALHES ===================== -->
+  <div class="modal-fundo" id="modal-fundo" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <div class="modal-cabeca">
+        <h3 id="modal-titulo">Detalhes do lote</h3>
+        <button type="button" class="modal-fechar" id="modal-fechar" aria-label="Fechar detalhes">×</button>
+      </div>
+      <div class="modal-corpo" id="modal-corpo"></div>
+    </div>
+  </div>
+
+  <!-- ===================== TOASTS ===================== -->
+  <div class="toast-area" id="toast-area" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
