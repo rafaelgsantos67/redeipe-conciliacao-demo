@@ -329,6 +329,11 @@
     if (l.liquidoRecebido === null) return;
     if (l.forma === 'dinheiro') {
       extrato.push({ data: l.dataLiquidacao, tipo: 'credito', valor: l.liquidoRecebido, descricao: 'Depósito em espécie — ' + l.id });
+    } else if (l.divergencia && l.divergencia.tipo === 'duplicidade') {
+      // duplicidade aparece no extrato como dois créditos idênticos
+      const metade = r2(l.liquidoRecebido / 2);
+      extrato.push({ data: l.dataLiquidacao, tipo: 'credito', valor: metade, descricao: 'Liquidação ' + l.formaLabel + ' ' + l.adquirente + ' — ' + l.id });
+      extrato.push({ data: l.dataLiquidacao, tipo: 'credito', valor: r2(l.liquidoRecebido - metade), descricao: 'Liquidação (lançamento duplicado) ' + l.formaLabel + ' ' + l.adquirente + ' — ' + l.id });
     } else if (l.liquidoRecebido > 0) {
       extrato.push({ data: l.dataLiquidacao, tipo: 'credito', valor: l.liquidoRecebido, descricao: 'Liquidação ' + l.formaLabel + ' ' + l.adquirente + ' — ' + l.id });
     }

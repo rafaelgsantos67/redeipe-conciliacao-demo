@@ -32,6 +32,21 @@
   const FORMA_POR_ID = {};
   DB.taxas.forEach((f) => { FORMA_POR_ID[f.id] = f; });
 
+  // Índice extrato bancário → lote (o id do lote está na descrição do lançamento)
+  const EXTRATO_POR_LOTE = {};
+  DB.extrato.forEach((e) => {
+    const m = e.descricao.match(/L-[A-Z]{3}-\d{8}-T\d-[A-Z_]+/);
+    if (m) (EXTRATO_POR_LOTE[m[0]] = EXTRATO_POR_LOTE[m[0]] || []).push(e);
+  });
+
+  const TIPOS_DIVERGENCIA = [
+    ['taxa_maior', 'Taxa maior que a contratada'],
+    ['nao_localizada', 'Venda não localizada'],
+    ['chargeback', 'Chargeback'],
+    ['duplicidade', 'Lançamento em duplicidade'],
+    ['aluguel_pos', 'Aluguel de POS não previsto']
+  ];
+
   const CORES_FORMAS = {
     dinheiro: '#5C6B70', pix: '#2F855A', debito: '#1F4A54',
     credito: '#F5A623', credito_parc: '#B7791F', frota: '#7FB3BF'
@@ -66,9 +81,10 @@
     tab: 'dashboard',
     unidade: 'all',
     periodo: 30,
-    conc: { status: 'todos', forma: 'todas', adquirente: 'todas', busca: '', ordCampo: 'data', ordDir: 'desc', pagina: 1 },
+    conc: { status: 'todos', tipoDiv: 'todos', forma: 'todas', adquirente: 'todas', busca: '', dia: '', ordCampo: 'data', ordDir: 'desc', pagina: 1 },
     fechDia: null,
-    antecipacao: {}
+    antecipacao: {},
+    antecAdq: 'todas'
   };
 
   /* ================= Filtros globais ================= */
@@ -144,10 +160,20 @@
       const h = Math.max(teto > 0 ? areaH * d.valor / teto : 0, d.valor > 0 ? 2 : 0);
       const x = mE + passo * i + (passo - bw) / 2;
       const y = mT + areaH - h;
+      const clicavel = o.aoClicar && d.chave != null;
+      const attrs = clicavel
+        ? ' class="barra-clicavel" tabindex="0" role="button" data-chave="' + esc(d.chave) + '" aria-label="' + esc(d.titulo || d.rotulo) + '"'
+        : '';
+      if (clicavel) {
+        // área de clique de coluna inteira, transparente, facilita acertar barras baixas
+        s += '<rect' + attrs + ' x="' + (mE + passo * i).toFixed(1) + '" y="' + mT + '" width="' + passo.toFixed(1) +
+          '" height="' + areaH + '" fill="transparent"><title>' + esc(d.titulo || (d.rotulo + ': ' + o.formato(d.valor))) + '</title></rect>';
+      }
       s += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) +
-        '" rx="3" fill="' + (d.cor || o.cor) + '"><title>' + esc(d.titulo || (d.rotulo + ': ' + o.formato(d.valor))) + '</title></rect>';
+        '" rx="3" fill="' + (d.cor || o.cor) + '" pointer-events="none">' +
+        (clicavel ? '' : '<title>' + esc(d.titulo || (d.rotulo + ': ' + o.formato(d.valor))) + '</title>') + '</rect>';
       if (i % saltoRotulo === 0) {
-        s += '<text x="' + (mE + passo * i + passo / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#5C6B70">' + esc(d.rotulo) + '</text>';
+        s += '<text x="' + (mE + passo * i + passo / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#5C6B70" pointer-events="none">' + esc(d.rotulo) + '</text>';
       }
     });
     s += '<line x1="' + mE + '" y1="' + (mT + areaH) + '" x2="' + (W - mD) + '" y2="' + (mT + areaH) + '" stroke="#B9C2BD" stroke-width="1.5"/>';
@@ -277,6 +303,23 @@
         (d.impacto >= 0 ? brl(d.impacto) + ' a recuperar' : brl(-d.impacto) + ' a devolver') + '</strong></div>';
     }
 
+    // Lançamentos do extrato bancário vinculados ao lote
+    const lancamentos = EXTRATO_POR_LOTE[l.id] || [];
+    let blocoExtrato = '<h4 class="modal-sec">Extrato bancário</h4>';
+    if (lancamentos.length > 0) {
+      blocoExtrato += '<table class="mini-tabela"><thead><tr><th>Data</th><th>Lançamento</th><th class="num">Valor</th></tr></thead><tbody>' +
+        lancamentos.map((e) =>
+          '<tr><td>' + fmtData(e.data) + '</td>' +
+          '<td>' + esc(e.descricao.replace(/ — (ref\. )?L-.*$/, '')) + '</td>' +
+          '<td class="num ' + (e.tipo === 'credito' ? 'texto-ok' : 'texto-erro') + '"><strong>' +
+          (e.tipo === 'credito' ? '+' : '−') + brl(e.valor) + '</strong></td></tr>').join('') +
+        '</tbody></table>';
+    } else if (l.dataLiquidacao > DB.hoje && !capturaFalhou) {
+      blocoExtrato += '<p class="modal-sec-vazio">Sem lançamentos até ' + fmtData(DB.hoje) + ' — liquidação prevista para ' + fmtData(l.dataLiquidacao) + '.</p>';
+    } else {
+      blocoExtrato += '<p class="modal-sec-vazio">Nenhum crédito localizado no extrato para este lote' + (capturaFalhou ? ' — reflexo da captura não localizada' : '') + '.</p>';
+    }
+
     let blocoTratado = '';
     if (s === 'manual') blocoTratado = '<div class="caixa-resolvida">✔ Este lote foi <strong>conciliado manualmente</strong> nesta demonstração.</div>';
     if (s === 'resolvida') blocoTratado = '<div class="caixa-resolvida">✔ Esta divergência foi <strong>marcada como resolvida</strong> nesta demonstração.</div>';
@@ -291,7 +334,8 @@
       acoes = '<span class="chip chip-ok">Lote conciliado automaticamente — nenhuma ação necessária.</span>';
     }
 
-    return grade + linhaTempo + blocoDiverg + blocoTratado + '<div class="modal-acoes">' + acoes + '</div>';
+    return grade + linhaTempo + blocoDiverg + blocoExtrato + blocoTratado +
+      '<div class="modal-acoes">' + acoes + '</div>';
   }
 
   function acaoLote(l, acao) {
@@ -324,7 +368,7 @@
 
     const porDia = dias.map((d) => {
       const v = r2(lotes.filter((l) => l.data === d).reduce((s, l) => s + l.bruto, 0));
-      return { rotulo: fmtDataCurta(d), valor: v, titulo: fmtData(d) + ': ' + brl(v) };
+      return { rotulo: fmtDataCurta(d), valor: v, chave: d, titulo: fmtData(d) + ': ' + brl(v) + ' — clique para ver a conciliação do dia' };
     });
 
     const mix = DB.taxas.map((f) => ({
@@ -360,7 +404,8 @@
       '</div>' +
 
       '<div class="grade-2">' +
-      '<div class="card"><h3>Vendas por dia</h3><div class="grafico">' + graficoBarras(porDia) + '</div></div>' +
+      '<div class="card"><h3>Vendas por dia</h3><div class="grafico">' + graficoBarras(porDia, { aoClicar: true }) + '</div>' +
+      '<p class="pequeno texto-suave">Clique em um dia para abrir sua conciliação.</p></div>' +
       '<div class="card"><h3>Mix por forma de pagamento</h3><div class="grafico">' + graficoDonut(mix) + '</div></div>' +
       '</div>' +
 
@@ -396,6 +441,18 @@
       tr.addEventListener('click', () => abrirModal(tr.getAttribute('data-lote')));
       tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrirModal(tr.getAttribute('data-lote')); } });
     });
+
+    sec.querySelectorAll('.barra-clicavel').forEach((b) => {
+      const irParaDia = () => abrirConciliacaoDoDia(b.getAttribute('data-chave'));
+      b.addEventListener('click', irParaDia);
+      b.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); irParaDia(); } });
+    });
+  }
+
+  function abrirConciliacaoDoDia(dia) {
+    estado.conc = Object.assign(estado.conc, { dia: dia, status: 'todos', tipoDiv: 'todos', forma: 'todas', adquirente: 'todas', busca: '', pagina: 1 });
+    ativarTab('conciliacao');
+    toast('Conciliação filtrada por ' + fmtData(dia) + '.');
   }
 
   function kpi(rotulo, valor, extra, classe) {
@@ -415,14 +472,20 @@
 
     sec.innerHTML =
       '<h2 class="titulo-aba">Conciliação venda × recebível</h2>' +
-      '<p class="subtitulo-aba">' + esc(nomeUnidadeFiltro()) + ' · ' + rotuloPeriodo() + ' · clique em uma linha para ver os detalhes e tratar o lote</p>' +
+      '<p class="subtitulo-aba">' + esc(nomeUnidadeFiltro()) +
+        (estado.conc.dia ? ' · <strong>dia ' + fmtData(estado.conc.dia) + '</strong>' : ' · ' + rotuloPeriodo()) +
+        ' · clique em uma linha para ver os detalhes e tratar o lote</p>' +
       '<div class="progresso-caixa" id="conc-progresso"></div>' +
       '<div class="card">' +
       '<div class="filtros-locais">' +
       campoSelect('conc-f-status', 'Status', [['todos', 'Todos'], ['conciliado', 'Conciliado'], ['pendente', 'Pendente'], ['divergencia', 'Divergência']], estado.conc.status) +
+      campoSelect('conc-f-tipodiv', 'Tipo de divergência', [['todos', 'Todos']].concat(TIPOS_DIVERGENCIA), estado.conc.tipoDiv) +
       campoSelect('conc-f-forma', 'Forma de pagamento', [['todas', 'Todas']].concat(DB.taxas.map((f) => [f.id, f.label])), estado.conc.forma) +
       campoSelect('conc-f-adq', 'Adquirente', [['todas', 'Todas']].concat(adquirentes.map((a) => [a, a])), estado.conc.adquirente) +
       '<label class="campo"><span>Buscar</span><input type="search" id="conc-f-busca" placeholder="Unidade, adquirente, lote…" value="' + esc(estado.conc.busca) + '"></label>' +
+      (estado.conc.dia
+        ? '<button type="button" class="btn btn-contorno btn-limpar-dia" id="conc-limpar-dia">Dia ' + fmtData(estado.conc.dia) + ' ✕</button>'
+        : '') +
       '</div>' +
       '<div class="rolagem"><table class="tabela" id="conc-tabela"><thead><tr>' +
       thOrd('data', 'Data') + thOrd('unidade', 'Unidade') + thOrd('turno', 'Turno') +
@@ -435,9 +498,17 @@
       '</div>';
 
     byId('conc-f-status').addEventListener('change', (e) => { estado.conc.status = e.target.value; estado.conc.pagina = 1; renderConcTabela(); });
+    byId('conc-f-tipodiv').addEventListener('change', (e) => {
+      estado.conc.tipoDiv = e.target.value;
+      if (e.target.value !== 'todos') { estado.conc.status = 'divergencia'; byId('conc-f-status').value = 'divergencia'; }
+      estado.conc.pagina = 1; renderConcTabela();
+    });
     byId('conc-f-forma').addEventListener('change', (e) => { estado.conc.forma = e.target.value; estado.conc.pagina = 1; renderConcTabela(); });
     byId('conc-f-adq').addEventListener('change', (e) => { estado.conc.adquirente = e.target.value; estado.conc.pagina = 1; renderConcTabela(); });
     byId('conc-f-busca').addEventListener('input', (e) => { estado.conc.busca = e.target.value; estado.conc.pagina = 1; renderConcTabela(); });
+    if (byId('conc-limpar-dia')) {
+      byId('conc-limpar-dia').addEventListener('click', () => { estado.conc.dia = ''; estado.conc.pagina = 1; renderConciliacao(byId('tab-conciliacao')); });
+    }
 
     sec.querySelectorAll('.th-ord').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -479,8 +550,10 @@
     const c = estado.conc;
     const busca = c.busca.trim().toLowerCase();
     let itens = lotesFiltrados().filter((l) => {
+      if (c.dia && l.data !== c.dia) return false;
       if (c.forma !== 'todas' && l.forma !== c.forma) return false;
       if (c.adquirente !== 'todas' && l.adquirente !== c.adquirente) return false;
+      if (c.tipoDiv !== 'todos' && (!l.divergencia || l.divergencia.tipo !== c.tipoDiv)) return false;
       if (c.status !== 'todos') {
         const s = statusEfetivo(l);
         const grupo = s === 'manual' || s === 'resolvida' ? 'conciliado' : s;
@@ -674,7 +747,10 @@
 
       '<div class="card"><h3>Simulador de antecipação</h3>' +
       '<p class="pequeno texto-suave">Selecione os dias na agenda ao lado. Custo estimado de <strong>' + fmtPct(TAXA_ANTECIPACAO_MES) + ' a.m.</strong> (ilustrativo), proporcional aos dias de antecipação.</p>' +
-      '<div class="acoes-linha" style="margin:10px 0 14px">' +
+      '<div class="filtros-locais" style="margin:10px 0 4px">' +
+      campoSelect('antec-adq', 'Antecipar apenas a adquirente', [['todas', 'Todas as adquirentes']].concat(adquirentes.map((a) => [a, a])), estado.antecAdq) +
+      '</div>' +
+      '<div class="acoes-linha" style="margin:6px 0 14px">' +
       '<button type="button" class="btn btn-contorno" id="antec-tudo">Selecionar tudo</button>' +
       '<button type="button" class="btn btn-contorno" id="antec-limpar">Limpar seleção</button></div>' +
       '<dl class="painel-resultado" id="antec-resultado"></dl>' +
@@ -697,6 +773,7 @@
       sec.querySelectorAll('.antec-check').forEach((ch) => { ch.checked = false; });
       renderAntecipacao();
     });
+    byId('antec-adq').addEventListener('change', (e) => { estado.antecAdq = e.target.value; renderAntecipacao(); });
 
     renderAntecipacao();
   }
@@ -706,15 +783,20 @@
     if (!alvo) return;
     const recs = recebiveisFiltrados();
     const fim40 = isoMais(DB.hoje, 40);
-    let bruto = 0, custo = 0, dias = 0;
+    const adq = estado.antecAdq;
+    let bruto = 0, custo = 0;
+    const diasComValor = {};
     recs.forEach((rr) => {
       if (rr.data > fim40 || !estado.antecipacao[rr.data]) return;
+      if (adq !== 'todas' && rr.adquirente !== adq) return;
       bruto = r2(bruto + rr.valor);
       custo = r2(custo + rr.valor * (TAXA_ANTECIPACAO_MES / 100 / 30) * diasEntre(DB.hoje, rr.data));
+      diasComValor[rr.data] = true;
     });
-    dias = Object.keys(estado.antecipacao).length;
+    const dias = Object.keys(diasComValor).length;
     alvo.innerHTML =
-      '<dt>Dias selecionados</dt><dd>' + dias + '</dd>' +
+      (adq !== 'todas' ? '<dt>Adquirente</dt><dd>' + esc(adq) + '</dd>' : '') +
+      '<dt>Dias com recebíveis selecionados</dt><dd>' + dias + '</dd>' +
       '<dt>Valor a antecipar</dt><dd>' + brl(bruto) + '</dd>' +
       '<dt>Custo estimado da antecipação</dt><dd class="texto-erro">− ' + brl(custo) + '</dd>' +
       '<dt>Valor líquido hoje</dt><dd class="destaque-liquido">' + brl(r2(bruto - custo)) + '</dd>';
@@ -1002,6 +1084,7 @@
     sel.addEventListener('change', () => {
       estado.unidade = sel.value;
       estado.conc.pagina = 1;
+      estado.conc.dia = '';
       renderTabAtiva();
     });
 
@@ -1011,6 +1094,7 @@
       b.addEventListener('click', () => {
         estado.periodo = parseInt(b.getAttribute('data-periodo'), 10);
         estado.conc.pagina = 1;
+        estado.conc.dia = '';
         document.querySelectorAll('.seg-btn').forEach((x) => {
           x.classList.toggle('ativo', x === b);
           x.setAttribute('aria-pressed', String(x === b));

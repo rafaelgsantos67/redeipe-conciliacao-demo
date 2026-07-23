@@ -185,6 +185,12 @@ input, select { font: inherit; color: inherit; }
 .grafico { width: 100%; overflow: hidden; }
 .grafico svg { display: block; width: 100%; height: auto; }
 
+.barra-clicavel { cursor: pointer; }
+.barra-clicavel:hover + rect { fill: var(--ipe-ambar); }
+.barra-clicavel:focus-visible { outline: 3px solid var(--ipe-ambar); outline-offset: 1px; }
+
+.btn-limpar-dia { padding: 7px 12px; font-size: .82rem; white-space: nowrap; align-self: end; }
+
 .legenda { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: .84rem; }
 .legenda-item { display: inline-flex; align-items: center; gap: 6px; color: var(--texto-suave); }
 .legenda-cor { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
@@ -413,6 +419,14 @@ input, select { font: inherit; color: inherit; }
 .modal-dado dd { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .modal-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.modal-sec {
+  font-size: .82rem; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--texto-suave); font-style: normal;
+  margin: 20px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--borda);
+}
+
+.modal-sec-vazio { font-size: .86rem; color: var(--texto-suave); font-style: italic; }
 
 .caixa-diverg {
   border-left: 4px solid var(--erro); background: #FBE9E5;
