@@ -51,7 +51,7 @@
     let salvo = null;
     try { salvo = JSON.parse(localStorage.getItem(CHAVE_LS) || 'null'); } catch (e) { salvo = null; }
     return Object.assign(
-      { conciliados: [], resolvidas: [], manualChecks: {}, manualResp: {} },
+      { conciliados: [], resolvidas: [], manualChecks: {}, manualResp: {}, boasVindasVista: false },
       salvo || {}
     );
   }
@@ -987,6 +987,13 @@
     renderTabAtiva();
   }
 
+  function fecharBoasVindas() {
+    byId('bv-fundo').hidden = true;
+    document.body.style.overflow = '';
+    persist.boasVindasVista = true;
+    salvarPersistencia();
+  }
+
   function iniciar() {
     // Filtro de unidade
     const sel = byId('filtro-unidade');
@@ -1024,7 +1031,19 @@
     });
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape' && !byId('modal-fundo').hidden) fecharModal();
+      if (ev.key === 'Escape' && !byId('bv-fundo').hidden) fecharBoasVindas();
     });
+
+    // Boas-vindas na primeira visita
+    byId('bv-fechar').addEventListener('click', fecharBoasVindas);
+    byId('bv-fundo').addEventListener('click', (ev) => {
+      if (ev.target === byId('bv-fundo')) fecharBoasVindas();
+    });
+    if (!persist.boasVindasVista) {
+      byId('bv-fundo').hidden = false;
+      document.body.style.overflow = 'hidden';
+      byId('bv-fechar').focus();
+    }
 
     // Rodapé
     byId('rodape-unidades').innerHTML = DB.unidades.map((u) =>

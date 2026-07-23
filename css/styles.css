@@ -459,6 +459,29 @@ input, select { font: inherit; color: inherit; }
 
 .lt-data { font-size: .76rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 
+/* ---------- Boas-vindas (1ª visita) ---------- */
+.bv { width: min(560px, 100%); }
+
+.bv-corpo { padding: 28px 30px 26px; }
+
+.bv-logo { display: inline-flex; margin-bottom: 12px; }
+
+.bv h3 { font-size: 1.3rem; margin-bottom: 8px; }
+
+.bv-intro { font-size: .92rem; color: var(--texto-suave); margin-bottom: 14px; }
+
+.bv-passos { margin: 0 0 14px 20px; display: flex; flex-direction: column; gap: 9px; font-size: .92rem; }
+
+.bv-passos li::marker { color: var(--ipe-ambar); font-weight: 800; }
+
+.bv-obs {
+  font-size: .84rem; color: var(--texto-suave);
+  background: var(--ipe-ambar-suave); border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 18px;
+}
+
+.bv-botao { width: 100%; justify-content: center; font-size: 1rem; }
+
 /* ---------- Toast ---------- */
 .toast-area {
   position: fixed; right: 20px; bottom: 20px; z-index: 200;
