@@ -12,15 +12,15 @@ Painel interativo que simula a rotina completa de **conciliação bancária de u
 
 ## Funcionalidades
 
-- **Painel** — indicadores do período (vendido, recebido, divergências, taxas, a receber), **comparativo entre as 4 unidades** (ranking por vendido, taxa efetiva, divergências, % conciliado e quebra de caixa), gráficos de vendas por dia, mix por forma de pagamento e vendas por produto, além dos principais alertas de divergência.
+- **Painel** — indicadores do período (vendido, recebido, divergências, taxas, a receber), **comparativo entre as 4 unidades** (ranking ordenável por vendido, taxa efetiva, divergências, % conciliado e quebra de caixa, exportável em CSV), gráficos de vendas por dia, mix por forma de pagamento e vendas por produto, além dos principais alertas de divergência.
 - **Conciliação** — tabela venda × recebível com ordenação, busca, filtro por status e por **tipo de divergência**, e modal de detalhes com linha do tempo (venda → captura → liquidação) e os **lançamentos do extrato bancário** vinculados ao lote. Divergências dos 5 tipos reais do setor: taxa maior que a contratada, venda não localizada, chargeback, duplicidade e tarifa de POS não prevista.
 - **Fechamento de Caixa** — encerrantes inicial/final por bomba, valor esperado × apurado, sangrias, quebra de caixa e o **LMC do dia** (Livro de Movimentação de Combustíveis) por produto, com destaque quando a variação de estoque excede o limite de 0,6% da Resolução ANP nº 884/2022.
-- **Recebíveis** — agenda dos próximos 40 dias por adquirente e simulador de antecipação (por período e por adquirente).
+- **Recebíveis** — agenda dos próximos 40 dias por adquirente (exportável em CSV) e simulador de antecipação (por período e por adquirente).
 - **Taxas & Simulador** — taxa contratada × taxa média cobrada por adquirente/modalidade e calculadora de recebimento.
 - **Relatórios** — DRE simplificado do período, exportação CSV e impressão/PDF.
-- **Manual de Padronização** — rotina diária em 6 etapas com checklist interativo, pensada como roteiro para vídeos de treinamento.
+- **Manual de Padronização** — rotina diária em 6 etapas com checklist interativo e **selo de progresso por etapa**, pensada como roteiro para vídeos de treinamento.
 
-Os filtros globais de **unidade** e **período** atualizam todas as abas. No Painel, clicar em uma barra de "Vendas por dia" abre a conciliação daquele dia.
+Os filtros globais de **unidade** e **período** atualizam todas as abas. No Painel, clicar em uma barra de "Vendas por dia" abre a conciliação daquele dia. As teclas **1 a 7** trocam de aba durante a apresentação (desativadas quando o foco está em um campo de formulário).
 
 ## Como executar
 

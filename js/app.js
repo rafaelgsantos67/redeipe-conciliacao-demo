@@ -19,6 +19,25 @@
   const byId = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  // CSV no padrão brasileiro do Excel: separador ";" e decimais com vírgula
+  const numCSV = (v) => (v === null || v === undefined) ? '' : v.toFixed(2).replace('.', ',');
+  const campoCSV = (v) => {
+    const s = String(v);
+    return s.indexOf(';') !== -1 || s.indexOf('"') !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  function baixarCSV(nomeArquivo, linhas, mensagemToast) {
+    const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast(mensagemToast);
+  }
+
   const UNIDADE_POR_ID = {};
   DB.unidades.forEach((u) => { UNIDADE_POR_ID[u.id] = u; });
   const nomeUnidade = (id) => (UNIDADE_POR_ID[id] ? UNIDADE_POR_ID[id].nome : id);
@@ -410,7 +429,7 @@
     });
   }
 
-  function cardComparativoUnidades() {
+  function unidadesOrdenadas() {
     const dados = metricasPorUnidade();
     const c = estado.comp;
     const dir = c.dir === 'asc' ? 1 : -1;
@@ -421,6 +440,11 @@
       if (va > vb) return dir;
       return 0;
     });
+    return dados;
+  }
+
+  function cardComparativoUnidades() {
+    const dados = unidadesOrdenadas();
     // Melhor/pior por métrica, para destacar a líder
     const maxVendido = Math.max.apply(null, dados.map((d) => d.vendido));
     const maxConc = Math.max.apply(null, dados.map((d) => d.pctConc));
@@ -433,7 +457,9 @@
     const totalDiv = dados.reduce((s, d) => s + d.divergencias, 0);
     const totalQuebra = r2(dados.reduce((s, d) => s + d.quebra, 0));
 
-    return '<div class="card"><h3>Comparativo entre unidades</h3>' +
+    return '<div class="card"><div class="cabeca-card">' +
+      '<h3>Comparativo entre unidades</h3>' +
+      '<button type="button" class="btn btn-contorno btn-pequeno" id="comp-csv">Exportar CSV</button></div>' +
       '<div class="rolagem"><table class="tabela" id="comp-tabela"><thead><tr>' +
       th('nome', 'Unidade') + th('vendido', 'Total vendido', true) +
       th('taxaEfetiva', 'Taxa efetiva', true) + th('divergencias', 'Diverg. em aberto', true) +
@@ -471,6 +497,21 @@
         renderDashboard(sec);
       });
     });
+    byId('comp-csv').addEventListener('click', exportarCSVComparativo);
+  }
+
+  function exportarCSVComparativo() {
+    const dados = unidadesOrdenadas();
+    const linhas = [
+      ['Unidade', 'Total vendido (R$)', 'Taxa efetiva (%)', 'Divergências em aberto', '% conciliado', 'Quebra de caixa (R$)'].join(';')
+    ];
+    dados.forEach((d) => {
+      linhas.push([
+        campoCSV(d.nome), numCSV(d.vendido), numCSV(d.taxaEfetiva),
+        d.divergencias, numCSV(d.pctConc), numCSV(d.quebra)
+      ].join(';'));
+    });
+    baixarCSV('comparativo_unidades_redeipe_' + estado.periodo + 'dias.csv', linhas, 'CSV exportado com o comparativo das 4 unidades.');
   }
 
   /* ================= Aba 1 · Painel (Dashboard) ================= */
@@ -858,10 +899,9 @@
       .map((l) => ({ data: l.dataLiquidacao, adquirente: l.adquirente, valor: l.liquidoInformado }));
   }
 
-  function renderRecebiveis(sec) {
+  function agendaRecebiveis() {
     const recs = recebiveisFiltrados();
     const fim40 = isoMais(DB.hoje, 40);
-
     const porDia = {};
     const porDiaAdq = {};
     recs.forEach((rr) => {
@@ -870,11 +910,15 @@
       if (!porDiaAdq[rr.data]) porDiaAdq[rr.data] = {};
       porDiaAdq[rr.data][rr.adquirente] = r2((porDiaAdq[rr.data][rr.adquirente] || 0) + rr.valor);
     });
-
     const diasAgenda = Object.keys(porDia).sort();
     const adquirentes = ['Cielo', 'Stone', 'Rede', 'Taurus Card', 'Ticket Log']
       .filter((a) => recs.some((rr) => rr.adquirente === a));
     const totalAgenda = r2(diasAgenda.reduce((s, d) => s + porDia[d], 0));
+    return { fim40, porDia, porDiaAdq, diasAgenda, adquirentes, totalAgenda };
+  }
+
+  function renderRecebiveis(sec) {
+    const { fim40, porDia, porDiaAdq, diasAgenda, adquirentes, totalAgenda } = agendaRecebiveis();
 
     const barras = [];
     for (let d = isoMais(DB.hoje, 1); d <= fim40; d = isoMais(d, 1)) {
@@ -885,7 +929,9 @@
       '<h2 class="titulo-aba">Recebíveis — agenda dos próximos 40 dias</h2>' +
       '<p class="subtitulo-aba">' + esc(nomeUnidadeFiltro()) + ' · vendas do período filtrado com liquidação de ' + fmtData(isoMais(DB.hoje, 1)) + ' a ' + fmtData(fim40) + '</p>' +
 
-      '<div class="card"><h3>Quanto cai por dia · total ' + brl(totalAgenda) + '</h3>' +
+      '<div class="card"><div class="cabeca-card">' +
+      '<h3>Quanto cai por dia · total ' + brl(totalAgenda) + '</h3>' +
+      '<button type="button" class="btn btn-contorno btn-pequeno" id="rec-csv"' + (diasAgenda.length === 0 ? ' disabled' : '') + '>Exportar CSV</button></div>' +
       '<div class="grafico">' + graficoBarras(barras, { altura: 190 }) + '</div></div>' +
 
       '<div class="grade-2">' +
@@ -932,8 +978,25 @@
       renderAntecipacao();
     });
     byId('antec-adq').addEventListener('change', (e) => { estado.antecAdq = e.target.value; renderAntecipacao(); });
+    byId('rec-csv').addEventListener('click', exportarCSVRecebiveis);
 
     renderAntecipacao();
+  }
+
+  function exportarCSVRecebiveis() {
+    const { porDia, porDiaAdq, diasAgenda, adquirentes } = agendaRecebiveis();
+    const linhas = [['Data', 'Adquirente', 'Valor (R$)'].join(';')];
+    diasAgenda.forEach((d) => {
+      adquirentes.forEach((a) => {
+        if (porDiaAdq[d][a]) linhas.push([fmtData(d), campoCSV(a), numCSV(porDiaAdq[d][a])].join(';'));
+      });
+      linhas.push([fmtData(d), 'Total do dia', numCSV(porDia[d])].join(';'));
+    });
+    baixarCSV(
+      'recebiveis_redeipe_' + estado.unidade + '.csv',
+      linhas,
+      'CSV exportado com a agenda de ' + diasAgenda.length + ' dias.'
+    );
   }
 
   function renderAntecipacao() {
@@ -1077,11 +1140,6 @@
   }
 
   function exportarCSV() {
-    const numCSV = (v) => v === null ? '' : v.toFixed(2).replace('.', ',');
-    const campoCSV = (v) => {
-      const s = String(v);
-      return s.indexOf(';') !== -1 || s.indexOf('"') !== -1 ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
     const rotuloStatus = { conciliado: 'Conciliado', manual: 'Conciliado (manual)', resolvida: 'Divergência resolvida', pendente: 'Pendente', divergencia: 'Divergência' };
 
     const linhas = [
@@ -1102,16 +1160,11 @@
       ].join(';'));
     });
 
-    const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'conciliacao_redeipe_' + estado.unidade + '_' + estado.periodo + 'dias.csv';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    toast('CSV exportado com ' + (linhas.length - 1) + ' lotes.');
+    baixarCSV(
+      'conciliacao_redeipe_' + estado.unidade + '_' + estado.periodo + 'dias.csv',
+      linhas,
+      'CSV exportado com ' + (linhas.length - 1) + ' lotes.'
+    );
   }
 
   /* ================= Aba 7 · Manual de Padronização ================= */
@@ -1160,9 +1213,12 @@
       '<div class="progresso-rotulo"><span>Checklist da rotina: ' + pctFeito + '% concluído</span><span class="texto-suave">' + feitos + ' de ' + totalItens + ' itens</span></div>' +
       '<div class="progresso-trilho"><div class="progresso-preenchido" style="width:' + pctFeito + '%"></div></div></div>' +
       '<div class="manual-etapas">' +
-      ETAPAS_MANUAL.map((e, ei) =>
-        '<div class="card etapa"><div class="etapa-numero">' + (ei + 1) + '</div>' +
-        '<h3>' + esc(e.titulo) + '</h3>' +
+      ETAPAS_MANUAL.map((e, ei) => {
+        const feitosEtapa = e.itens.filter((_, ii) => persist.manualChecks['e' + ei + 'i' + ii]).length;
+        return '<div class="card etapa"><div class="etapa-numero">' + (ei + 1) + '</div>' +
+        '<div class="etapa-cabeca"><h3>' + esc(e.titulo) + '</h3>' +
+        '<span class="selo-etapa' + (feitosEtapa === e.itens.length ? ' selo-etapa-completa' : '') + '" id="etapa-badge-' + ei + '">' +
+        feitosEtapa + '/' + e.itens.length + '</span></div>' +
         '<p class="etapa-desc">' + esc(e.desc) + '</p>' +
         '<label class="etapa-resp"><span><strong>Responsável:</strong></span>' +
         '<input type="text" name="responsavel-etapa-' + (ei + 1) + '" data-resp="' + ei + '" placeholder="Defina o responsável por esta etapa" value="' + esc(persist.manualResp[ei] || '') + '"></label>' +
@@ -1171,7 +1227,8 @@
           const chave = 'e' + ei + 'i' + ii;
           return '<li><label><input type="checkbox" name="item-' + chave + '" data-check="' + chave + '"' + (persist.manualChecks[chave] ? ' checked' : '') + '><span>' + esc(item) + '</span></label></li>';
         }).join('') +
-        '</ul></div>').join('') +
+        '</ul></div>';
+      }).join('') +
       '</div>';
 
     sec.querySelectorAll('[data-check]').forEach((ch) => {
@@ -1197,6 +1254,14 @@
     const barra = sec.querySelector('.progresso-preenchido');
     if (rotulo) rotulo.innerHTML = '<span>Checklist da rotina: ' + pctFeito + '% concluído</span><span class="texto-suave">' + feitos + ' de ' + totalItens + ' itens</span>';
     if (barra) barra.style.width = pctFeito + '%';
+
+    ETAPAS_MANUAL.forEach((e, ei) => {
+      const badge = sec.querySelector('#etapa-badge-' + ei);
+      if (!badge) return;
+      const feitosEtapa = e.itens.filter((_, ii) => persist.manualChecks['e' + ei + 'i' + ii]).length;
+      badge.textContent = feitosEtapa + '/' + e.itens.length;
+      badge.classList.toggle('selo-etapa-completa', feitosEtapa === e.itens.length);
+    });
   }
 
   /* ================= Navegação por abas e filtros globais ================= */
@@ -1299,6 +1364,20 @@
       if (ev.key === 'Escape' && !byId('modal-fundo').hidden) fecharModal();
       if (ev.key === 'Escape' && !byId('bv-fundo').hidden) fecharBoasVindas();
       if (ev.key === 'Tab') prenderFocoNoModal(ev);
+    });
+
+    // Atalhos 1–7 para trocar de aba durante a apresentação (fora de campos de formulário e diálogos)
+    const ORDEM_ABAS = ['dashboard', 'conciliacao', 'fechamento', 'recebiveis', 'taxas', 'relatorios', 'manual'];
+    document.addEventListener('keydown', (ev) => {
+      if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
+      const n = Number(ev.key);
+      if (!Number.isInteger(n) || n < 1 || n > ORDEM_ABAS.length) return;
+      if (!byId('modal-fundo').hidden || !byId('bv-fundo').hidden) return;
+      const tagAtivo = (document.activeElement && document.activeElement.tagName) || '';
+      if (['INPUT', 'SELECT', 'TEXTAREA'].indexOf(tagAtivo) !== -1) return;
+      const tab = ORDEM_ABAS[n - 1];
+      ativarTab(tab);
+      byId('aba-' + tab).focus();
     });
 
     // Boas-vindas na primeira visita

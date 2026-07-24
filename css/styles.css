@@ -164,6 +164,15 @@ input, select { font: inherit; color: inherit; }
 
 .card h3 { font-size: 1.02rem; margin-bottom: 12px; }
 
+.cabeca-card {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+
+.cabeca-card h3 { margin-bottom: 0; }
+
+.btn-pequeno { padding: 6px 12px; font-size: .8rem; }
+
 .nota {
   background: var(--ipe-ambar-suave); border-left: 4px solid var(--ipe-ambar);
   border-radius: 6px; padding: 10px 14px; font-size: .9rem; margin-bottom: 18px;
@@ -558,7 +567,21 @@ input, select { font: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: center;
 }
 
-.etapa h3 { margin-bottom: 4px; }
+.etapa-cabeca {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 4px;
+}
+
+.etapa-cabeca h3 { margin-bottom: 0; }
+
+.selo-etapa {
+  flex-shrink: 0; font-size: .74rem; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--ipe-ambar-suave); color: var(--atencao);
+  font-variant-numeric: tabular-nums;
+}
+
+.selo-etapa-completa { background: #E8F2EC; color: var(--ok); }
 
 .etapa-desc { font-size: .88rem; color: var(--texto-suave); margin-bottom: 10px; }
 
