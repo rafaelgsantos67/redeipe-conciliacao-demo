@@ -84,7 +84,8 @@
     conc: { status: 'todos', tipoDiv: 'todos', forma: 'todas', adquirente: 'todas', busca: '', dia: '', ordCampo: 'data', ordDir: 'desc', pagina: 1 },
     fechDia: null,
     antecipacao: {},
-    antecAdq: 'todas'
+    antecAdq: 'todas',
+    comp: { campo: 'vendido', dir: 'desc' }
   };
 
   /* ================= Filtros globais ================= */
@@ -232,6 +233,28 @@
     }, 3200);
   }
 
+  /* ================= Animações (polimento) ================= */
+  const MOVIMENTO_REDUZIDO = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function animarKpis(sec) {
+    if (MOVIMENTO_REDUZIDO) return; // respeita quem desativa animações
+    sec.querySelectorAll('.kpi-valor[data-animar]').forEach((el) => {
+      const alvo = parseFloat(el.getAttribute('data-animar'));
+      if (!(alvo > 0)) return;
+      const textoFinal = el.textContent;
+      const dur = 650, ini = performance.now();
+      const passo = (agora) => {
+        const t = Math.min((agora - ini) / dur, 1);
+        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        if (t >= 1) { el.textContent = textoFinal; return; }
+        el.textContent = brl(alvo * eased);
+        requestAnimationFrame(passo);
+      };
+      el.textContent = brl(0);
+      requestAnimationFrame(passo);
+    });
+  }
+
   /* ================= Modal de detalhes ================= */
   let focoAnterior = null;
 
@@ -257,6 +280,23 @@
     document.body.style.overflow = '';
     if (focoAnterior && document.contains(focoAnterior)) focoAnterior.focus();
     focoAnterior = null;
+  }
+
+  // Mantém o foco preso dentro do diálogo aberto (modal de lote ou boas-vindas)
+  function prenderFocoNoModal(ev) {
+    const fundo = !byId('modal-fundo').hidden ? byId('modal-fundo')
+      : !byId('bv-fundo').hidden ? byId('bv-fundo') : null;
+    if (!fundo) return;
+    const focaveis = fundo.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (focaveis.length === 0) return;
+    const primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1];
+    if (ev.shiftKey && document.activeElement === primeiro) {
+      ev.preventDefault(); ultimo.focus();
+    } else if (!ev.shiftKey && document.activeElement === ultimo) {
+      ev.preventDefault(); primeiro.focus();
+    } else if (!fundo.contains(document.activeElement)) {
+      ev.preventDefault(); primeiro.focus();
+    }
   }
 
   function htmlModal(l) {
@@ -352,6 +392,87 @@
     renderTabAtiva();
   }
 
+  /* ================= Comparativo entre unidades (visão de rede) ================= */
+  function metricasPorUnidade() {
+    return DB.unidades.map((u) => {
+      const lotes = DB.lotes.filter((l) => l.unidadeId === u.id && dentroPeriodo(l.data));
+      const fechs = DB.fechamentos.filter((f) => f.unidadeId === u.id && dentroPeriodo(f.data));
+      const vendido = r2(lotes.reduce((s, l) => s + l.bruto, 0));
+      const liquidados = lotes.filter((l) => l.dataLiquidacao <= DB.hoje);
+      const brutoLiq = liquidados.reduce((s, l) => s + l.bruto, 0);
+      const taxaLiq = liquidados.reduce((s, l) => s + l.taxaCobradaValor, 0);
+      const taxaEfetiva = brutoLiq > 0 ? 100 * taxaLiq / brutoLiq : 0;
+      const divergencias = lotes.filter(divergenciaAberta).length;
+      const conciliados = lotes.filter(estaVerde).length;
+      const pctConc = lotes.length ? 100 * conciliados / lotes.length : 0;
+      const quebra = r2(fechs.reduce((s, f) => s + f.quebra, 0));
+      return { id: u.id, nome: u.nome, vendido, taxaEfetiva, divergencias, pctConc, quebra };
+    });
+  }
+
+  function cardComparativoUnidades() {
+    const dados = metricasPorUnidade();
+    const c = estado.comp;
+    const dir = c.dir === 'asc' ? 1 : -1;
+    dados.sort((a, b) => {
+      const va = c.campo === 'nome' ? a.nome : a[c.campo];
+      const vb = c.campo === 'nome' ? b.nome : b[c.campo];
+      if (va < vb) return -dir;
+      if (va > vb) return dir;
+      return 0;
+    });
+    // Melhor/pior por métrica, para destacar a líder
+    const maxVendido = Math.max.apply(null, dados.map((d) => d.vendido));
+    const maxConc = Math.max.apply(null, dados.map((d) => d.pctConc));
+
+    const th = (campo, rotulo, num) =>
+      '<th' + (num ? ' class="num"' : '') + '><button type="button" class="th-ord" data-comp="' + campo + '">' +
+      rotulo + '<span class="ord-seta" data-comp-seta="' + campo + '"></span></button></th>';
+
+    const totalVendido = r2(dados.reduce((s, d) => s + d.vendido, 0));
+    const totalDiv = dados.reduce((s, d) => s + d.divergencias, 0);
+    const totalQuebra = r2(dados.reduce((s, d) => s + d.quebra, 0));
+
+    return '<div class="card"><h3>Comparativo entre unidades</h3>' +
+      '<div class="rolagem"><table class="tabela" id="comp-tabela"><thead><tr>' +
+      th('nome', 'Unidade') + th('vendido', 'Total vendido', true) +
+      th('taxaEfetiva', 'Taxa efetiva', true) + th('divergencias', 'Diverg. em aberto', true) +
+      th('pctConc', '% conciliado', true) + th('quebra', 'Quebra de caixa', true) +
+      '</tr></thead><tbody>' +
+      dados.map((d) => {
+        const lider = d.vendido === maxVendido;
+        return '<tr class="linha-status ' + (d.divergencias === 0 ? 'linha-ok' : 'linha-atencao') + '">' +
+          '<td>' + esc(d.nome) + (lider ? ' <span class="selo-lider">líder</span>' : '') + '</td>' +
+          '<td class="num">' + brl(d.vendido) + '</td>' +
+          '<td class="num">' + fmtPct(d.taxaEfetiva) + '</td>' +
+          '<td class="num' + (d.divergencias > 0 ? ' texto-erro' : '') + '">' + d.divergencias + '</td>' +
+          '<td class="num' + (d.pctConc === maxConc ? ' texto-ok' : '') + '">' + Math.round(d.pctConc) + '%</td>' +
+          '<td class="num ' + (d.quebra < 0 ? 'texto-erro' : 'texto-ok') + '">' + (d.quebra >= 0 ? '+' : '−') + brl(Math.abs(d.quebra)) + '</td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td>Rede (4 unidades)</td>' +
+      '<td class="num">' + brl(totalVendido) + '</td><td class="num">—</td>' +
+      '<td class="num">' + totalDiv + '</td><td class="num">—</td>' +
+      '<td class="num ' + (totalQuebra < 0 ? 'texto-erro' : 'texto-ok') + '">' + (totalQuebra >= 0 ? '+' : '−') + brl(Math.abs(totalQuebra)) + '</td></tr></tfoot>' +
+      '</table></div>' +
+      '<p class="pequeno texto-suave">Clique num cabeçalho para reordenar. Taxa efetiva = taxas cobradas ÷ volume já liquidado no período.</p></div>';
+  }
+
+  function ligarComparativo(sec) {
+    const tabela = sec.querySelector('#comp-tabela');
+    if (!tabela) return;
+    tabela.querySelectorAll('.ord-seta').forEach((sp) => {
+      sp.textContent = sp.getAttribute('data-comp-seta') === estado.comp.campo ? (estado.comp.dir === 'asc' ? '▲' : '▼') : '';
+    });
+    tabela.querySelectorAll('.th-ord').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const campo = btn.getAttribute('data-comp');
+        if (estado.comp.campo === campo) estado.comp.dir = estado.comp.dir === 'asc' ? 'desc' : 'asc';
+        else { estado.comp.campo = campo; estado.comp.dir = campo === 'nome' ? 'asc' : 'desc'; }
+        renderDashboard(sec);
+      });
+    });
+  }
+
   /* ================= Aba 1 · Painel (Dashboard) ================= */
   function renderDashboard(sec) {
     const lotes = lotesFiltrados();
@@ -396,12 +517,14 @@
       '<p class="subtitulo-aba">' + esc(nomeUnidadeFiltro()) + ' · ' + rotuloPeriodo() + ' · valores ilustrativos</p>' +
 
       '<div class="kpis">' +
-      kpi('Total vendido', brl(totalVendido), fmtNum(litros) + ' L + conveniência', '') +
-      kpi('Total recebido (líquido)', brl(totalRecebido), 'creditado até ' + fmtData(DB.hoje), 'kpi-ok') +
-      kpi('Divergências', brl(valorDiverg), divergAbertas.length + ' ocorrência' + (divergAbertas.length === 1 ? '' : 's') + ' em aberto', 'kpi-erro') +
-      kpi('Taxas pagas', brl(taxasPagas), totalVendido > 0 ? fmtPct(100 * taxasPagas / totalVendido) + ' do bruto' : '—', 'kpi-ambar') +
-      kpi('A receber', brl(aReceber), 'agenda futura das adquirentes', 'kpi-atencao') +
+      kpi('Total vendido', brl(totalVendido), fmtNum(litros) + ' L + conveniência', '', totalVendido) +
+      kpi('Total recebido (líquido)', brl(totalRecebido), 'creditado até ' + fmtData(DB.hoje), 'kpi-ok', totalRecebido) +
+      kpi('Divergências', brl(valorDiverg), divergAbertas.length + ' ocorrência' + (divergAbertas.length === 1 ? '' : 's') + ' em aberto', 'kpi-erro', valorDiverg) +
+      kpi('Taxas pagas', brl(taxasPagas), totalVendido > 0 ? fmtPct(100 * taxasPagas / totalVendido) + ' do bruto' : '—', 'kpi-ambar', taxasPagas) +
+      kpi('A receber', brl(aReceber), 'agenda futura das adquirentes', 'kpi-atencao', aReceber) +
       '</div>' +
+
+      (estado.unidade === 'all' ? cardComparativoUnidades() : '') +
 
       '<div class="grade-2">' +
       '<div class="card"><h3>Vendas por dia</h3><div class="grafico">' + graficoBarras(porDia, { aoClicar: true }) + '</div>' +
@@ -447,6 +570,9 @@
       b.addEventListener('click', irParaDia);
       b.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); irParaDia(); } });
     });
+
+    ligarComparativo(sec);
+    animarKpis(sec);
   }
 
   function abrirConciliacaoDoDia(dia) {
@@ -455,9 +581,10 @@
     toast('Conciliação filtrada por ' + fmtData(dia) + '.');
   }
 
-  function kpi(rotulo, valor, extra, classe) {
+  function kpi(rotulo, valor, extra, classe, numAnimar) {
+    const attr = (numAnimar != null && numAnimar > 0) ? ' data-animar="' + numAnimar + '"' : '';
     return '<div class="kpi ' + classe + '"><div class="kpi-rotulo">' + rotulo + '</div>' +
-      '<div class="kpi-valor">' + valor + '</div><div class="kpi-extra">' + extra + '</div></div>';
+      '<div class="kpi-valor"' + attr + '>' + valor + '</div><div class="kpi-extra">' + extra + '</div></div>';
   }
 
   function nomeUnidadeFiltro() {
@@ -644,10 +771,41 @@
       '<th class="num">Litros</th><th class="num">Valor esperado</th><th class="num">Valor apurado</th><th class="num">Quebra</th><th class="num">Sangrias</th></tr></thead>' +
       '<tbody id="fech-corpo"></tbody></table></div>' +
       '<p class="pequeno texto-suave">Valor esperado = litros vendidos × preço por produto (combustíveis da pista). Clique na linha para ver encerrantes por bomba e sangrias.</p>' +
+      '</div>' +
+
+      '<div class="card"><h3>LMC do dia — Livro de Movimentação de Combustíveis</h3>' +
+      '<div class="rolagem"><table class="tabela" id="lmc-tabela"><thead><tr><th>Unidade</th><th>Produto</th>' +
+      '<th class="num">Estoque inicial</th><th class="num">Entrada</th><th class="num">Vendido</th>' +
+      '<th class="num">Estoque final teórico</th><th class="num">Medição física</th><th class="num">Variação</th><th class="num">% perda/sobra</th></tr></thead>' +
+      '<tbody id="lmc-corpo"></tbody></table></div>' +
+      '<p class="pequeno texto-suave">Estoque final teórico = inicial + entrada − vendido. A variação frente à medição física do tanque é tolerada até <strong>0,6%</strong> (Resolução ANP nº 884/2022); linhas destacadas excedem esse limite e pedem investigação (aferição de bicos, vazamento ou desvio).</p>' +
       '</div>';
 
-    byId('fech-dia').addEventListener('change', (e) => { estado.fechDia = e.target.value; renderFechCorpo(); });
+    byId('fech-dia').addEventListener('change', (e) => { estado.fechDia = e.target.value; renderFechCorpo(); renderLmcCorpo(); });
     renderFechCorpo();
+    renderLmcCorpo();
+  }
+
+  function renderLmcCorpo() {
+    const linhas = DB.lmc
+      .filter((r) => r.data === estado.fechDia && daUnidade(r))
+      .sort((a, b) => (nomeUnidade(a.unidadeId) + a.produtoId).localeCompare(nomeUnidade(b.unidadeId) + b.produtoId));
+
+    byId('lmc-corpo').innerHTML = linhas.length === 0
+      ? '<tr><td colspan="9" class="sem-resultado">Sem movimentação para o filtro atual.</td></tr>'
+      : linhas.map((r) =>
+        '<tr class="linha-status ' + (r.excede ? 'linha-erro' : 'linha-ok') + '">' +
+        '<td>' + esc(nomeUnidade(r.unidadeId)) + '</td>' +
+        '<td>' + esc(PRODUTO_POR_ID[r.produtoId].nome) + '</td>' +
+        '<td class="num">' + fmtNum(r.estoqueIni) + '</td>' +
+        '<td class="num">' + (r.entrada > 0 ? '+' + fmtNum(r.entrada) : '—') + '</td>' +
+        '<td class="num">' + fmtNum(r.vendido) + '</td>' +
+        '<td class="num">' + fmtNum(r.estoqueFinalTeorico) + '</td>' +
+        '<td class="num">' + fmtNum(r.medicaoFisica) + '</td>' +
+        '<td class="num ' + (r.variacao < 0 ? 'texto-erro' : 'texto-ok') + '">' + (r.variacao >= 0 ? '+' : '−') + fmtNum(Math.abs(r.variacao)) + ' L</td>' +
+        '<td class="num">' + (r.excede
+          ? '<span class="selo-sev sev-alta">' + fmtPct(r.perdaPct) + '</span>'
+          : fmtPct(r.perdaPct)) + '</td></tr>').join('');
   }
 
   function renderFechCorpo() {
@@ -1058,15 +1216,25 @@
   }
 
   function ativarTab(tab) {
+    const trocou = estado.tab !== tab;
     estado.tab = tab;
     document.querySelectorAll('.aba').forEach((b) => {
       const ativa = b.getAttribute('data-tab') === tab;
       b.setAttribute('aria-selected', String(ativa));
+      b.setAttribute('tabindex', ativa ? '0' : '-1');
     });
     document.querySelectorAll('.painel-aba').forEach((sec) => {
       sec.hidden = sec.id !== 'tab-' + tab;
     });
     renderTabAtiva();
+    // fade-in suave só na troca de aba (não a cada mudança de filtro)
+    if (trocou && !MOVIMENTO_REDUZIDO) {
+      const sec = byId('tab-' + tab);
+      sec.classList.remove('entrando');
+      void sec.offsetWidth; // força reflow para reiniciar a animação
+      sec.classList.add('entrando');
+      sec.addEventListener('animationend', () => sec.classList.remove('entrando'), { once: true });
+    }
   }
 
   function fecharBoasVindas() {
@@ -1103,9 +1271,23 @@
       });
     });
 
-    // Abas
-    document.querySelectorAll('.aba').forEach((b) => {
+    // Abas — clique + navegação por setas (padrão ARIA tablist)
+    const abas = Array.from(document.querySelectorAll('.aba'));
+    abas.forEach((b, i) => {
+      b.setAttribute('tabindex', b.getAttribute('aria-selected') === 'true' ? '0' : '-1');
       b.addEventListener('click', () => ativarTab(b.getAttribute('data-tab')));
+      b.addEventListener('keydown', (ev) => {
+        let alvo = null;
+        if (ev.key === 'ArrowRight') alvo = abas[(i + 1) % abas.length];
+        else if (ev.key === 'ArrowLeft') alvo = abas[(i - 1 + abas.length) % abas.length];
+        else if (ev.key === 'Home') alvo = abas[0];
+        else if (ev.key === 'End') alvo = abas[abas.length - 1];
+        if (alvo) {
+          ev.preventDefault();
+          ativarTab(alvo.getAttribute('data-tab'));
+          alvo.focus();
+        }
+      });
     });
 
     // Modal
@@ -1116,6 +1298,7 @@
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape' && !byId('modal-fundo').hidden) fecharModal();
       if (ev.key === 'Escape' && !byId('bv-fundo').hidden) fecharBoasVindas();
+      if (ev.key === 'Tab') prenderFocoNoModal(ev);
     });
 
     // Boas-vindas na primeira visita

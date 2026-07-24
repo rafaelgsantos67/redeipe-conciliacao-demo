@@ -343,6 +343,51 @@
   });
   extrato.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : 0);
 
+  /* ---------- LMC — Livro de Movimentação de Combustíveis ----------
+     Por unidade/produto/dia: estoque inicial + entradas − vendido = estoque
+     final teórico; a medição física do tanque difere por perda/sobra.
+     Tolerância de 0,6% (Resolução ANP nº 884/2022). Determinístico. */
+  const CAP_TANQUE = { GC: 30000, GA: 15000, ET: 20000, S10: 30000 };
+  const PROD_PISTA = ['GC', 'GA', 'ET', 'S10'];
+  const vendidoDUP = {};
+  vendas.forEach((v) => {
+    if (v.produtoId === 'CONV') return;
+    const k = v.data + '|' + v.unidadeId + '|' + v.produtoId;
+    vendidoDUP[k] = (vendidoDUP[k] || 0) + v.litros;
+  });
+  const estoqueTanque = {};
+  UNIDADES.forEach((u) => {
+    estoqueTanque[u.id] = {};
+    PROD_PISTA.forEach((pid) => { estoqueTanque[u.id][pid] = Math.round(entre(0.45, 0.75) * CAP_TANQUE[pid]); });
+  });
+  const lmc = [];
+  DIAS.forEach((data) => {
+    UNIDADES.forEach((u) => {
+      PROD_PISTA.forEach((pid) => {
+        const vendido = Math.round(vendidoDUP[data + '|' + u.id + '|' + pid] || 0);
+        const estoqueIni = estoqueTanque[u.id][pid];
+        // caminhão-tanque reabastece (múltiplos de 5.000 L) quando o estoque ficaria baixo
+        let entrada = 0;
+        if (estoqueIni - vendido < CAP_TANQUE[pid] * 0.25) {
+          entrada = Math.ceil((CAP_TANQUE[pid] * 0.72 - (estoqueIni - vendido)) / 5000) * 5000;
+        }
+        const estoqueFinalTeorico = estoqueIni + entrada - vendido;
+        // variação: maioria dentro da tolerância; ~10% dos dias excede 0,6%
+        const perdaPct = rng() < 0.90 ? entre(0.02, 0.55) : entre(0.62, 1.08);
+        const sinal = rng() < 0.80 ? -1 : 1; // perda é mais comum que sobra
+        const variacao = Math.round(sinal * vendido * perdaPct / 100);
+        const medicaoFisica = estoqueFinalTeorico + variacao;
+        estoqueTanque[u.id][pid] = medicaoFisica;
+        const pct = vendido > 0 ? r2(Math.abs(variacao) / vendido * 100) : 0;
+        lmc.push({
+          data, unidadeId: u.id, produtoId: pid,
+          estoqueIni, entrada, vendido, estoqueFinalTeorico, medicaoFisica,
+          variacao, perdaPct: pct, excede: pct > 0.6
+        });
+      });
+    });
+  });
+
   /* ---------- Alertas (divergências ordenadas por impacto) ---------- */
   const alertas = lotes
     .filter((l) => l.divergencia)
@@ -363,6 +408,6 @@
     produtos: PRODUTOS,
     turnos: TURNOS,
     taxas: FORMAS,
-    vendas, fechamentos, lotes, recebiveis, extrato, alertas
+    vendas, fechamentos, lotes, recebiveis, extrato, alertas, lmc
   };
 })();
